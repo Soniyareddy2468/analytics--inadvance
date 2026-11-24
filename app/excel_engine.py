@@ -7,12 +7,53 @@ def _column_hint(columns, candidates, fallback):
             return col
     return fallback
 
+def _column_letter(index):
+    result = ""
+    index += 1
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+def _find_column_index(columns, candidates):
+    for index, col in enumerate(columns):
+        normalized = re.sub(r"[^a-z0-9]", "", col.lower())
+        if any(word in normalized for word in candidates):
+            return index
+    return None
+
 def generate_excel_solution(prompt: str, columns: list[str]):
     q = prompt.lower()
     amount = _column_hint(columns, ["sales", "revenue", "amount", "total"], "Sales")
     date = _column_hint(columns, ["date", "orderdate", "month"], "Date")
 
-    if any(k in q for k in ["duplicate", "duplicates", "repeated rows"]):
+    # Grouped summaries must be checked before generic total-sales requests.
+    group_terms = {
+        "employee": (["employee", "employeename", "staff", "salesperson", "representative", "rep", "name"], ["employee", "staff", "salesperson", "sales person", "representative", "rep"]),
+        "product": (["product", "productname", "item", "sku"], ["product", "item", "sku"]),
+        "category": (["category", "department", "region", "city", "customer"], ["category", "department", "region", "city", "customer"]),
+    }
+    group_type = None
+    for kind, (_, terms) in group_terms.items():
+        if any(term in q for term in terms) and any(phrase in q for phrase in ["by", "each", "per", "for every", "for each"]):
+            group_type = kind
+            break
+
+    if group_type:
+        candidates, terms = group_terms[group_type]
+        group_index = _find_column_index(columns, candidates)
+        amount_index = _find_column_index(columns, ["sales", "revenue", "amount", "total"])
+        group_col = _column_letter(group_index) if group_index is not None else "A"
+        amount_col = _column_letter(amount_index) if amount_index is not None else "B"
+        title = f"Calculate total sales for each {group_type}"
+        formula = f"=SUMIF(${group_col}:${group_col},D2,${amount_col}:${amount_col})"
+        if columns and group_index is not None and amount_index is not None:
+            explanation = f"Adds values from '{columns[amount_index]}' where '{columns[group_index]}' matches the {group_type} entered in D2."
+            steps = [f"Your uploaded headers show '{columns[group_index]}' in column {group_col} and '{columns[amount_index]}' in column {amount_col}.", f"List a {group_type} to summarize in D2.", "Enter the formula in E2 and copy it down for the other names."]
+        else:
+            explanation = f"Adds sales values in column {amount_col} where the {group_type} in column {group_col} matches the value in D2."
+            steps = [f"Keep {group_type} names in column {group_col} and sales values in column {amount_col}.", f"List a {group_type} to summarize in D2.", "Enter the formula in E2 and copy it down for the other names."]
+    elif any(k in q for k in ["duplicate", "duplicates", "repeated rows"]):
         title, formula = "Flag duplicate values", "=COUNTIF(A:A,A2)>1"
         explanation = "Checks whether the value in A2 appears more than once in column A. Replace A with the column you want to check."
         steps = ["Add a helper column named Duplicate?", "Enter the formula in row 2.", "Fill it down and filter TRUE."]
@@ -38,7 +79,7 @@ def generate_excel_solution(prompt: str, columns: list[str]):
         explanation = "Calculates the arithmetic mean of values in B2:B100."
         steps = ["Replace the range with your data range.", "Enter the formula in a blank cell."]
     elif "lookup" in q or "find the name" in q:
-        title, formula = "Look up a matching value", "=XLOOKUP(E2,A:A,B:B,\"Not found\")"
+        title, formula = "Look up a matching value", '=XLOOKUP(E2,A:A,B:B,"Not found")'
         explanation = "Looks for the value in E2 in column A and returns the matching value from column B."
         steps = ["Enter the lookup value in E2.", "Keep lookup values in A and return values in B.", "Paste the formula in the result cell."]
     elif "count" in q or "number of orders" in q:
@@ -58,7 +99,7 @@ def generate_excel_solution(prompt: str, columns: list[str]):
         "title": title, "platform": "Excel", "formula": formula,
         "explanation": explanation, "steps": steps,
         "assumptions": [
-            "Example cell references are used; exact workbook layout is not yet mapped.",
+            "Example cell references are used; exact workbook layout is not yet mapped unless uploaded column headers are supplied.",
             "Check column letters and ranges before applying the formula."
         ],
         "confidence": "Starter rule-based match",
