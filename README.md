@@ -11,14 +11,30 @@ An analytics productivity workspace for Advanced Excel, Power BI and Tableau. Th
 - FastAPI backend and responsive web interface.
 - Rule-based formula matching; no AI API key is required for this starter release.
 
-## Run in GitHub Codespaces
-1. Open this repository and choose **Code → Codespaces → Create codespace on main**.
-2. In the terminal, run:
+## Run in Google Cloud Shell
+1. Open [Google Cloud Shell](https://shell.cloud.google.com/) and wait for the terminal to load.
+2. Clone this repository:
    ```bash
+   git clone https://github.com/Soniyareddy2468/analytics--inadvance.git
+   cd analytics--inadvance
+   ```
+   If the folder already exists, use `cd ~/analytics--inadvance` instead of cloning again.
+3. Create and activate a virtual environment:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+4. Install dependencies and start the app:
+   ```bash
+   python -m pip install --upgrade pip
    pip install -r requirements.txt
    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
-3. Open the **Ports** tab and click port 8000.
+5. In Cloud Shell, select **Web Preview → Preview on port 8000**. The app opens in a browser tab. Keep the terminal running while using it.
+6. To stop the app, press `Ctrl+C` in the terminal.
+
+## Run locally
+The same commands work in a local terminal after installing Python 3.11+ and Git. On Windows, activate the environment with `.venv\\Scripts\\Activate.ps1`.
 
 ## API
 - `GET /api/health`
