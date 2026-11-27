@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.excel_engine import generate_excel_solution
+from app.bi_engine import generate_bi_solution
 
 BASE_DIR = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -40,9 +41,11 @@ def health():
 def generate(request: FormulaRequest):
     if not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Please enter a task.")
-    if request.platform != "Excel":
-        raise HTTPException(status_code=501, detail=f"{request.platform} support is planned for a later module. Excel is available now.")
-    return generate_excel_solution(request.prompt, request.columns or [])
+    if request.platform == "Excel":
+        return generate_excel_solution(request.prompt, request.columns or [])
+    if request.platform in ("Power BI", "Tableau"):
+        return generate_bi_solution(request.prompt, request.columns or [], request.platform)
+    raise HTTPException(status_code=400, detail="Choose Excel, Power BI or Tableau.")
 
 
 async def read_tabular_upload(file: UploadFile):
