@@ -2,7 +2,7 @@
 
 **Ask. Analyze. Automate.**
 
-An analytics productivity workspace for Advanced Excel, Power BI and Tableau. The current prototype includes an Excel Formula Assistant and an Excel/CSV Dataset Analyzer.
+An analytics productivity workspace for Advanced Excel, Power BI and Tableau. The current prototype includes an Excel Formula Assistant, an Excel/CSV Dataset Analyzer, and rule-based starter assistants for Power BI DAX and Tableau calculated fields.
 
 ## Current features
 - Convert common business questions into Excel formulas with explanations and application steps.
@@ -12,6 +12,9 @@ An analytics productivity workspace for Advanced Excel, Power BI and Tableau. Th
 - Calculate sum, average, minimum and maximum for numeric columns.
 - Detect duplicate rows and summarize dataset quality.
 - Display key findings and download a JSON analysis report.
+- Power BI starter DAX measures for totals, averages, profit margin, distinct customers, row counts, minimums and maximums.
+- Tableau starter calculated fields for totals, averages, profit margin, distinct customers, record counts, minimums, maximums and a FIXED customer-level LOD expression.
+- Optional comma-separated column names to tailor Power BI and Tableau suggestions.
 - FastAPI backend and responsive browser interface.
 
 The formula assistant currently uses rule-based matching; no AI API key is required. Dataset profiling is deterministic and runs on the uploaded file during the request.
@@ -53,10 +56,10 @@ If port 8000 is already in use, the server may already be running. Try Web Previ
 ## Roadmap
 1. Excel formula assistant and dataset analysis (prototype)
 2. Advanced Excel automation and downloadable reports
-3. Power BI DAX and Power Query M assistant
-4. Tableau calculated fields and LOD expressions
+3. Expand Power BI DAX coverage and add Power Query M generation
+4. Expand Tableau calculated fields and LOD expressions
 5. More advanced cleaning, visualization and business insights
 6. Authentication, team workspaces and production controls
 
 ## Important
-This is an early prototype. Formula suggestions are rule-based and must be checked against your workbook. Numeric profiling treats values that can be parsed as numbers as numeric; dates and other text are not included in numeric summaries. Power BI and Tableau generation are not implemented yet. Do not upload confidential company data to a public demo. Production use requires security, access controls, validation and privacy review.
+This is an early prototype. Formula suggestions are rule-based and must be checked against your workbook. Numeric profiling treats values that can be parsed as numbers as numeric; dates and other text are not included in numeric summaries. Power BI and Tableau currently provide limited rule-based starter suggestions, not complete semantic-model or workbook integrations. Power Query M generation, live Power BI/Tableau connections, authentication, multi-user workspaces, deployment hardening and automated integration tests are not yet implemented. Do not upload confidential company data to a public demo. Production use requires security, access controls, validation and privacy review.
