@@ -34,7 +34,7 @@ def home():
 @app.get("/api/health")
 def health():
     return {"status": "ok", "product": "Analytics InAdvance",
-            "modules": ["Excel Formula Assistant", "Excel Dataset Analyzer"]}
+            "modules": ["Excel Formula Assistant", "Excel Dataset Analyzer", "Power BI DAX Assistant", "Tableau Calculated Field Assistant"]}
 
 
 @app.post("/api/generate")
