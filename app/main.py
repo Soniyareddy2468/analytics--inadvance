@@ -391,6 +391,24 @@ async def download_pdf_report(file: UploadFile = File(...)):
     story.extend([metric_table, Paragraph("Key insights", styles["SectionHeading"])])
     for insight in report["insights"]:
         story.append(Paragraph("• " + insight, styles["BodyText"]))
+    business = report.get("business_insights", {})
+    story.append(Paragraph("Business insights and recommendations", styles["SectionHeading"]))
+    business_lines = []
+    if business.get("total_sales") is not None:
+        business_lines.append(f"Total sales: {business['total_sales']:,.2f}")
+    if business.get("total_profit") is not None:
+        business_lines.append(f"Total profit: {business['total_profit']:,.2f}")
+    if business.get("best_region"):
+        business_lines.append(f"Highest-sales region: {business['best_region']['label']} ({business['best_region']['value']:,.2f})")
+    if business.get("best_product"):
+        business_lines.append(f"Top-selling product: {business['best_product']['label']} ({business['best_product']['value']:,.2f})")
+    if business.get("monthly_growth_percent") is not None:
+        business_lines.append(f"Latest month-over-month sales change: {business['monthly_growth_percent']:.2f}%")
+    for line in business_lines:
+        story.append(Paragraph("• " + line, styles["BodyText"]))
+    for recommendation in business.get("recommendations", []):
+        story.append(Paragraph("Recommendation: " + recommendation, styles["SmallCell"]))
+
     story.append(Paragraph("Visual analytics", styles["SectionHeading"]))
 
     from reportlab.graphics.shapes import Drawing, String
