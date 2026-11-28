@@ -295,6 +295,112 @@ async def analyze_file(
     }
 
 
+@app.post("/api/ask")
+async def ask_business_question(
+    file: UploadFile = File(...),
+    question: str = Form(...),
+):
+    """Answer common business questions using only the uploaded dataset."""
+    question = question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Enter a business question.")
+
+    headers, rows = await read_tabular_upload(file)
+    q = question.lower()
+    sales_i = _header_index(headers, ["sales", "revenue", "amount", "total"])
+    profit_i = _header_index(headers, ["profit", "income", "netprofit"])
+    region_i = _header_index(headers, ["region", "city", "location", "state"])
+    product_i = _header_index(headers, ["product", "item", "category", "sku"])
+    date_i = _header_index(headers, ["date", "orderdate", "transactiondate"])
+    quantity_i = _header_index(headers, ["quantity", "qty", "units"])
+
+    def total_for(index):
+        if index is None:
+            return None
+        vals = [numeric_value(row[index] if index < len(row) else None) for row in rows]
+        valid = [v for v in vals if v is not None]
+        return round(sum(valid), 2) if valid else None
+
+    def fmt(value):
+        return f"{value:,.2f}" if value is not None else "not available"
+
+    answer = ""
+    if any(word in q for word in ("missing", "empty", "blank", "null")):
+        count = sum(is_missing(row[i] if i < len(row) else None)
+                    for row in rows for i in range(len(headers)))
+        answer = f"The dataset contains {count:,} missing cell(s) across {len(rows):,} row(s)."
+    elif any(word in q for word in ("duplicate", "duplicated", "repeated row")):
+        normalized = [tuple("" if is_missing(v) else str(v).strip() for v in row) for row in rows]
+        count = len(normalized) - len(set(normalized))
+        answer = f"I found {count:,} duplicate row(s) in the uploaded dataset."
+    elif any(word in q for word in ("how many rows", "row count", "number of rows", "records")):
+        answer = f"The uploaded dataset contains {len(rows):,} data row(s) and {len(headers)} column(s)."
+    elif ("profit margin" in q or "margin" in q):
+        sales, profit = total_for(sales_i), total_for(profit_i)
+        answer = (f"Overall profit margin is {(profit / sales * 100):.2f}% "
+                  f"(profit {fmt(profit)} divided by sales {fmt(sales)})."
+                  if sales not in (None, 0) and profit is not None
+                  else "I can't calculate profit margin. Check that the dataset has numeric Sales and Profit columns.")
+    elif any(word in q for word in ("average sales", "mean sales", "average revenue")):
+        vals = [numeric_value(row[sales_i] if sales_i is not None and sales_i < len(row) else None) for row in rows]
+        vals = [v for v in vals if v is not None]
+        answer = f"Average sales per non-empty record is {fmt(sum(vals) / len(vals) if vals else None)}."
+    elif any(word in q for word in ("total profit", "profit total", "profit made", "how much profit")):
+        answer = f"Total profit is {fmt(total_for(profit_i))}." if profit_i is not None else "I couldn't find a Profit column."
+    elif any(word in q for word in ("total sales", "sales total", "total revenue", "revenue total", "how much sales")):
+        answer = f"Total sales are {fmt(total_for(sales_i))}." if sales_i is not None else "I couldn't find a Sales or Revenue column."
+    elif any(word in q for word in ("best region", "top region", "highest region", "region perform")):
+        groups = _group_totals(headers, rows, region_i, sales_i)
+        answer = (f"{groups[0]['label']} is the highest-sales region with {fmt(groups[0]['value'])} in sales."
+                  if groups else "I couldn't identify Region and Sales columns for this comparison.")
+    elif any(word in q for word in ("best product", "top product", "best selling product", "top-selling product")):
+        groups = _group_totals(headers, rows, product_i, sales_i)
+        answer = (f"{groups[0]['label']} is the top product with {fmt(groups[0]['value'])} in sales."
+                  if groups else "I couldn't identify Product and Sales columns for this comparison.")
+    elif any(word in q for word in ("sales by region", "compare region", "region wise")):
+        groups = _group_totals(headers, rows, region_i, sales_i)
+        answer = ("Sales by region: " + "; ".join(f"{g['label']}: {fmt(g['value'])}" for g in groups)
+                  if groups else "I couldn't identify Region and Sales columns.")
+    elif any(word in q for word in ("sales by product", "product wise", "compare product")):
+        groups = _group_totals(headers, rows, product_i, sales_i)
+        answer = ("Sales by product: " + "; ".join(f"{g['label']}: {fmt(g['value'])}" for g in groups)
+                  if groups else "I couldn't identify Product and Sales columns.")
+    elif any(word in q for word in ("quantity", "units sold", "total units")):
+        answer = f"Total quantity is {fmt(total_for(quantity_i))}." if quantity_i is not None else "I couldn't find a Quantity or Units column."
+    elif any(word in q for word in ("highest sale", "maximum sale", "largest sale", "biggest sale")):
+        vals = [numeric_value(row[sales_i] if sales_i is not None and sales_i < len(row) else None) for row in rows]
+        vals = [v for v in vals if v is not None]
+        answer = f"The largest individual sales value is {fmt(max(vals) if vals else None)}."
+    elif any(word in q for word in ("lowest sale", "minimum sale", "smallest sale")):
+        vals = [numeric_value(row[sales_i] if sales_i is not None and sales_i < len(row) else None) for row in rows]
+        vals = [v for v in vals if v is not None]
+        answer = f"The smallest individual sales value is {fmt(min(vals) if vals else None)}."
+    elif "month" in q and ("sales" in q or "revenue" in q):
+        if date_i is None or sales_i is None:
+            answer = "I need Date and Sales columns to summarize monthly sales."
+        else:
+            monthly = {}
+            for row in rows:
+                date = row[date_i] if date_i < len(row) else None
+                amount = numeric_value(row[sales_i] if sales_i < len(row) else None)
+                if not is_missing(date) and amount is not None:
+                    try:
+                        key = datetime.fromisoformat(str(date).strip()[:10]).strftime("%Y-%m")
+                        monthly[key] = monthly.get(key, 0) + amount
+                    except ValueError:
+                        pass
+            answer = ("Monthly sales: " + "; ".join(f"{k}: {fmt(v)}" for k, v in sorted(monthly.items()))
+                      if monthly else "No valid dated sales records were found.")
+    else:
+        answer = ("I can answer questions about total sales, total profit, average sales, profit margin, "
+                  "best region, top product, sales by region/product, monthly sales, quantity, missing cells, "
+                  "duplicate rows and row count. Try one of those questions.")
+
+    return {"question": question, "answer": answer,
+            "basis": f"Calculated from {len(rows):,} uploaded data row(s).",
+            "mode": "Dataset-grounded rule-based assistant; no external AI service is connected."}
+
+
 @app.post("/api/clean")
 async def clean_dataset(
     file: UploadFile = File(...),
