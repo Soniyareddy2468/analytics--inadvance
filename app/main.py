@@ -284,25 +284,67 @@ async def download_pdf_report(file: UploadFile = File(...)):
         story.append(Paragraph("• " + insight, styles["BodyText"]))
     story.append(Paragraph("Visual analytics", styles["SectionHeading"]))
 
-    chart_titles = [
+    from reportlab.graphics.shapes import Drawing, String
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+    chart_specs = [
         ("Monthly sales", "monthly_sales"),
         ("Sales by region", "region_sales"),
         ("Sales by product", "product_sales"),
         ("Profit by region", "profit_by_region"),
     ]
-    chart_rows = []
-    for title, key in chart_titles:
-        items = report.get("charts", {}).get(key, [])
-        chart_rows.append([Paragraph(f"<b>{title}</b>", styles["SmallCell"]),
-                           Paragraph(" | ".join(
-                               f"{item['label']}: {item['value']:,.2f}" for item in items
-                           ) if items else "No matching columns found.", styles["SmallCell"])])
-    chart_table = Table(chart_rows, colWidths=[42 * mm, doc.width - 42 * mm])
+
+    def make_bar_chart(title, items):
+        drawing = Drawing(350, 190)
+        drawing.add(String(8, 174, title, fontName="Helvetica-Bold",
+                           fontSize=10, fillColor=colors.HexColor("#167c70")))
+        if not items:
+            drawing.add(String(8, 90, "No matching columns found.",
+                               fontSize=8, fillColor=colors.HexColor("#64748b")))
+            return drawing
+
+        chart = VerticalBarChart()
+        chart.x = 42
+        chart.y = 38
+        chart.width = 292
+        chart.height = 118
+        chart.data = [[float(item["value"]) for item in items]]
+        chart.categoryAxis.categoryNames = [str(item["label"])[:16] for item in items]
+        chart.categoryAxis.labels.fontName = "Helvetica"
+        chart.categoryAxis.labels.fontSize = 7
+        chart.categoryAxis.labels.angle = 0
+        chart.categoryAxis.labels.boxAnchor = "ne"
+        chart.valueAxis.labels.fontName = "Helvetica"
+        chart.valueAxis.labels.fontSize = 7
+        chart.valueAxis.valueMin = min(0, min(float(item["value"]) for item in items))
+        maximum = max(float(item["value"]) for item in items)
+        chart.valueAxis.valueMax = maximum * 1.15 if maximum > 0 else 1
+        chart.valueAxis.valueStep = max(chart.valueAxis.valueMax / 4, 1)
+        chart.bars[0].fillColor = colors.HexColor("#38bfa7")
+        chart.bars[0].strokeColor = colors.HexColor("#167c70")
+        chart.barWidth = min(28, max(10, 210 / len(items)))
+        chart.groupSpacing = 8
+        drawing.add(chart)
+        return drawing
+
+    chart_cells = []
+    for index in range(0, len(chart_specs), 2):
+        left_title, left_key = chart_specs[index]
+        right_title, right_key = chart_specs[index + 1]
+        left_chart = make_bar_chart(left_title, report.get("charts", {}).get(left_key, []))
+        right_chart = make_bar_chart(right_title, report.get("charts", {}).get(right_key, []))
+        chart_cells.append([left_chart, right_chart])
+
+    chart_table = Table(chart_cells, colWidths=[doc.width / 2] * 2, rowHeights=[195] * len(chart_cells))
     chart_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#edf5f5")),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#cbd5e1")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("PADDING", (0, 0), (-1, -1), 6),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fafc")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dbe4ee")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(chart_table)
 
