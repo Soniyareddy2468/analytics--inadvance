@@ -32,6 +32,15 @@
 <h3>Data preview</h3><div class="table-wrap"><table><thead id="previewHead"></thead><tbody id="previewRows"></tbody></table></div>
 <button class="secondary" id="downloadReport" style="margin-top:15px">Download JSON report</button>
 <button class="secondary" id="downloadPdf" style="margin-top:15px;margin-left:8px">Download PDF report</button>
+<div style="margin-top:18px;padding:15px;border:1px solid #35435f;border-radius:12px;background:#0b1426">
+<strong style="font-size:14px">Data Cleaning Assistant</strong>
+<p class="muted">Create a cleaned CSV copy. Your original file will not be changed.</p>
+<label for="missingStrategy">MISSING VALUE HANDLING</label>
+<select id="missingStrategy"><option value="keep">Keep missing values</option><option value="drop_rows">Remove rows containing missing values</option><option value="fill_numeric_mean">Fill missing numeric cells with column average</option></select>
+<label style="display:flex;align-items:center;gap:8px;margin-top:12px"><input id="removeDuplicates" type="checkbox" checked style="width:auto"> Remove duplicate rows</label>
+<button class="secondary" id="cleanDataset" style="margin-top:12px">Download cleaned CSV</button>
+<p id="cleanMessage" class="muted" aria-live="polite"></p>
+</div>
 <p class="muted">Note: Numeric summaries ignore empty and non-numeric cells. Review the source workbook before making business decisions.</p>
 </div></section>
 <div class="foot">Analytics InAdvance · Prototype v0.3 · Validate formulas and inspect source data before business use.</div></main>
@@ -61,5 +70,19 @@ $("analyze").addEventListener("click",async()=>{const file=$("dataset").files[0]
  renderChart("Profit by region",data.charts?.profit_by_region)
  );$("analysisResult").classList.add("show");}catch(error){$("analysisError").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Analyze dataset";}});
 $("downloadReport").addEventListener("click",()=>{if(!latestReport)return;const blob=new Blob([JSON.stringify(latestReport,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="analytics-inadvance-report.json";link.click();URL.revokeObjectURL(url);});
+
+$("cleanDataset").addEventListener("click",async()=>{
+ const file=$("dataset").files[0];
+ if(!file){$("cleanMessage").textContent="Please select a dataset first.";return;}
+ const btn=$("cleanDataset");btn.disabled=true;btn.textContent="Cleaning…";$("cleanMessage").textContent="";
+ try{
+  const body=new FormData();body.append("file",file);body.append("remove_duplicates",$("removeDuplicates").checked?"true":"false");body.append("missing_strategy",$("missingStrategy").value);
+  const response=await fetch("/api/clean",{method:"POST",body});
+  if(!response.ok){const err=await response.json().catch(()=>({}));throw new Error(err.detail||"Cleaning failed");}
+  const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=file.name.replace(/\\.(csv|xlsx|xlsm)$/i,"")+"-cleaned.csv";document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);
+  const original=response.headers.get("X-Original-Rows")||"?";const cleaned=response.headers.get("X-Cleaned-Rows")||"?";const duplicates=response.headers.get("X-Duplicates-Removed")||"0";const removed=response.headers.get("X-Rows-Removed")||"0";
+  $("cleanMessage").textContent="Downloaded cleaned CSV: "+original+" original rows → "+cleaned+" rows; "+duplicates+" duplicate rows removed; "+removed+" rows removed for missing values.";
+ }catch(error){$("cleanMessage").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Download cleaned CSV";}
+});
 $("downloadPdf").addEventListener("click",async()=>{const file=$("dataset").files[0];if(!file){$("analysisError").textContent="Please select the dataset again before downloading the PDF.";return;}const btn=$("downloadPdf");btn.disabled=true;btn.textContent="Creating PDF…";$("analysisError").textContent="";try{const body=new FormData();body.append("file",file);const response=await fetch("/api/report/pdf",{method:"POST",body});if(!response.ok){const err=await response.json().catch(()=>({}));throw new Error(err.detail||"PDF export failed");}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=(file.name.replace(/\\.[^.]+$/,"")||"dataset")+"-analysis-report.pdf";document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);}catch(error){$("analysisError").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Download PDF report";}});
 </script></body></html>
