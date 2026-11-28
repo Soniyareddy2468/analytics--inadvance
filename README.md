@@ -80,3 +80,12 @@ If port 8000 is already in use, the server may already be running. Try Web Previ
 
 ## Important
 This is an early prototype. Formula suggestions are rule-based and must be checked against your workbook. Numeric profiling treats values that can be parsed as numbers as numeric; dates and other text are not included in numeric summaries. Power BI and Tableau currently provide limited rule-based starter suggestions, not complete semantic-model or workbook integrations. Power Query M generation, live Power BI/Tableau connections, authentication, multi-user workspaces, deployment hardening and automated integration tests are not yet implemented. Do not upload confidential company data to a public demo. Production use requires security, access controls, validation and privacy review.
+
+
+## Interactive Business Dashboard
+
+- Filter analyzed data by date range, region and product.
+- Recalculate filtered sales, profit and profit margin KPIs and charts in the browser.
+- Compare filtered sales and profit totals.
+- Export a PDF report using the selected region and product filters.
+- Date, region and product filter parameters are also accepted by the PDF report endpoint.
