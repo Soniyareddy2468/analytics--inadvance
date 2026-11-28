@@ -31,7 +31,22 @@
 <h3>Business Insights Assistant</h3>
 <div class="metric-grid" id="businessMetrics"></div>
 <ul class="insights" id="businessRecommendations"></ul>
-<h3>Interactive dashboard filters</h3>
+
+<div style="margin-top:18px;padding:18px;border:1px solid #35435f;border-radius:12px;background:#0b1426">
+ <h3 style="margin-top:0">Business Analyst Assistant</h3>
+ <p class="muted">Ask a question about the dataset you uploaded. Answers are calculated from its actual rows.</p>
+ <label for="businessQuestion">YOUR BUSINESS QUESTION</label>
+ <textarea id="businessQuestion" rows="2" placeholder="Example: Which region has the highest sales?"></textarea>
+ <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px">
+  <button class="secondary askExample" type="button" data-question="Which region has the highest sales?">Best region</button>
+  <button class="secondary askExample" type="button" data-question="What are the total sales and total profit?">Sales and profit</button>
+  <button class="secondary askExample" type="button" data-question="What is the profit margin?">Profit margin</button>
+ </div>
+ <button class="primary" id="askBusiness" type="button">Ask about my data</button>
+ <div id="businessAnswer" class="result" aria-live="polite"></div>
+ <p id="businessAskError" class="muted" style="color:#ff9caa"></p>
+</div>
+\n<h3>Interactive dashboard filters</h3>
 <div class="metric-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
  <div><label for="filterStart">FROM DATE</label><input id="filterStart" type="date"></div>
  <div><label for="filterEnd">TO DATE</label><input id="filterEnd" type="date"></div>
@@ -128,7 +143,27 @@ $("analyze").addEventListener("click",async()=>{const file=$("dataset").files[0]
  $("analysisResult").classList.add("show");}catch(error){$("analysisError").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Analyze dataset";}});
 $("downloadReport").addEventListener("click",()=>{if(!latestReport)return;const blob=new Blob([JSON.stringify(latestReport,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="analytics-inadvance-report.json";link.click();URL.revokeObjectURL(url);});
 
-$("cleanDataset").addEventListener("click",async()=>{
+
+async function askBusinessQuestion(){
+ const file=$("dataset").files[0],question=$("businessQuestion").value.trim();
+ $("businessAskError").textContent="";$("businessAnswer").classList.remove("show");
+ if(!file){$("businessAskError").textContent="Please select your CSV or Excel file first.";return;}
+ if(!question){$("businessAskError").textContent="Enter a question about your dataset.";return;}
+ const btn=$("askBusiness");btn.disabled=true;btn.textContent="Analyzing your question…";
+ try{
+  const body=new FormData();body.append("file",file);body.append("question",question);
+  const response=await fetch("/api/ask",{method:"POST",body});const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||"Could not answer this question.");
+  const box=$("businessAnswer");box.replaceChildren();
+  const heading=document.createElement("h3");heading.textContent="Answer";const answer=document.createElement("p");answer.textContent=data.answer;
+  const basis=document.createElement("p");basis.className="muted";basis.textContent=data.basis+" "+data.mode;
+  box.append(heading,answer,basis);box.classList.add("show");
+ }catch(error){$("businessAskError").textContent=error.message;}
+ finally{btn.disabled=false;btn.textContent="Ask about my data";}
+}
+$("askBusiness").addEventListener("click",askBusinessQuestion);
+document.querySelectorAll(".askExample").forEach(btn=>btn.addEventListener("click",()=>{$("businessQuestion").value=btn.dataset.question;askBusinessQuestion();}));
+\n$("cleanDataset").addEventListener("click",async()=>{
  const file=$("dataset").files[0];
  if(!file){$("cleanMessage").textContent="Please select a dataset first.";return;}
  const btn=$("cleanDataset");btn.disabled=true;btn.textContent="Cleaning…";$("cleanMessage").textContent="";
