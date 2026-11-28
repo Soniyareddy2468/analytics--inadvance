@@ -141,8 +141,35 @@ async def inspect_file(file: UploadFile = File(...)):
 
 
 @app.post("/api/analyze")
-async def analyze_file(file: UploadFile = File(...)):
+async def analyze_file(
+    file: UploadFile = File(...),
+    filter_month: Optional[str] = None,
+    filter_region: Optional[str] = None,
+    filter_product: Optional[str] = None,
+):
     headers, rows = await read_tabular_upload(file)
+    sales_index = _header_index(headers, ["sales", "revenue", "amount", "total"])
+    profit_index = _header_index(headers, ["profit", "income", "netprofit"])
+    date_index = _header_index(headers, ["date", "orderdate", "transactiondate"])
+    region_index = _header_index(headers, ["region", "city", "location", "state"])
+    product_index = _header_index(headers, ["product", "item", "category", "sku"])
+
+    def row_month(row):
+        raw_date = row[date_index] if date_index is not None and date_index < len(row) else None
+        if is_missing(raw_date):
+            return ""
+        try:
+            return datetime.fromisoformat(str(raw_date).strip()[:10]).strftime("%Y-%m")
+        except (TypeError, ValueError):
+            return ""
+
+    if filter_month or filter_region or filter_product:
+        rows = [
+            row for row in rows
+            if (not filter_month or row_month(row) == filter_month)
+            and (not filter_region or (region_index is not None and str(row[region_index]).strip() == filter_region))
+            and (not filter_product or (product_index is not None and str(row[product_index]).strip() == filter_product))
+        ]
     column_results = []
     for index, name in enumerate(headers):
         values = [row[index] if index < len(row) else None for row in rows]
@@ -177,12 +204,6 @@ async def analyze_file(file: UploadFile = File(...)):
         insights.append(f"{largest['name']} has the largest numeric column total ({largest['sum']:,.2f}).")
     else:
         insights.append("No numeric columns were detected for summary statistics.")
-
-    sales_index = _header_index(headers, ["sales", "revenue", "amount", "total"])
-    profit_index = _header_index(headers, ["profit", "income", "netprofit"])
-    date_index = _header_index(headers, ["date", "orderdate", "transactiondate"])
-    region_index = _header_index(headers, ["region", "city", "location", "state"])
-    product_index = _header_index(headers, ["product", "item", "category", "sku"])
 
     monthly = {}
     if date_index is not None and sales_index is not None:
@@ -251,6 +272,16 @@ async def analyze_file(file: UploadFile = File(...)):
         "insights": insights,
         "business_insights": business_insights,
         "preview": [[str(v) if v is not None else "" for v in row] for row in rows[:5]],
+        "dashboard_rows": [
+            {
+                "date": str(row[date_index])[:10] if date_index is not None and date_index < len(row) and not is_missing(row[date_index]) else "",
+                "month": row_month(row),
+                "region": str(row[region_index]).strip() if region_index is not None and region_index < len(row) and not is_missing(row[region_index]) else "",
+                "product": str(row[product_index]).strip() if product_index is not None and product_index < len(row) and not is_missing(row[product_index]) else "",
+                "sales": numeric_value(row[sales_index]) if sales_index is not None and sales_index < len(row) else None,
+                "profit": numeric_value(row[profit_index]) if profit_index is not None and profit_index < len(row) else None,
+            } for row in rows
+        ],
         "charts": {
             "monthly_sales": [{"label": key, "value": round(value, 2)} for key, value in sorted(monthly.items())],
             "region_sales": _group_totals(headers, rows, region_index, sales_index),
@@ -325,9 +356,14 @@ async def clean_dataset(
 
 
 @app.post("/api/report/pdf")
-async def download_pdf_report(file: UploadFile = File(...)):
+async def download_pdf_report(
+    file: UploadFile = File(...),
+    filter_month: Optional[str] = Form(None),
+    filter_region: Optional[str] = Form(None),
+    filter_product: Optional[str] = Form(None),
+):
     """Analyze an uploaded dataset and return a formatted PDF report."""
-    report = await analyze_file(file)
+    report = await analyze_file(file, filter_month, filter_region, filter_product)
 
     try:
         from reportlab.lib import colors
