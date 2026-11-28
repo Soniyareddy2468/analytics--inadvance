@@ -89,3 +89,17 @@ This is an early prototype. Formula suggestions are rule-based and must be check
 - Compare filtered sales and profit totals.
 - Export a PDF report using the selected region and product filters.
 - Date, region and product filter parameters are also accepted by the PDF report endpoint.
+
+
+## AI Project Studio
+
+The dashboard includes an AI Project Studio for conversational project planning and starter-code generation.
+- Chat with an AI project builder, refine requirements and request changes.
+- Generate a project plan and up to 12 starter files per response.
+- Preview generated text files and export generated files as a ZIP.
+- Uses the OpenAI Responses API from the server. Configure `OPENAI_API_KEY` as a Render environment secret. Optionally set `OPENAI_MODEL`; default: `gpt-6.2-sol`.
+- Never commit the API key to GitHub or enter it in the browser.
+- Generated code still needs review, dependency installation, testing, security checks and deployment configuration. This first version does not execute generated code in an isolated sandbox or automatically deploy it.
+- Endpoints: `POST /api/project/chat` and `POST /api/project/export`.
+
+For Render, open the service **Environment** settings, add `OPENAI_API_KEY` with your OpenAI API key, optionally add `OPENAI_MODEL`, save and redeploy. API usage may incur separate charges; ChatGPT subscription access does not include API credits.
