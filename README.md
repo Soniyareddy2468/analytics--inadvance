@@ -64,7 +64,8 @@ If port 8000 is already in use, the server may already be running. Try Web Previ
 - `GET /api/health`
 - `POST /api/generate` with JSON such as `{"prompt":"Calculate total sales","platform":"Excel"}`
 - `POST /api/inspect` accepts CSV/XLSX uploads and returns headers and a preview.
-- `POST /api/analyze` accepts a CSV/XLSX/XLSM upload and returns dataset statistics, missing values, duplicate-row count, insights, chart data and a preview.\n- `POST /api/report/pdf` accepts a CSV/XLSX/XLSM upload and returns a formatted PDF analysis report.
+- `POST /api/analyze` accepts a CSV/XLSX/XLSM upload and returns dataset statistics, missing values, duplicate-row count, insights, chart data and a preview.
+- `POST /api/report/pdf` accepts a CSV/XLSX/XLSM upload and returns a formatted PDF analysis report.
 
 ## Roadmap
 1. Excel formula assistant and dataset analysis (prototype)
