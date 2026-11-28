@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import math
+from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
@@ -90,6 +91,30 @@ async def read_tabular_upload(file: UploadFile):
     return headers, data_rows
 
 
+
+def _header_index(headers, keywords):
+    for index, header in enumerate(headers):
+        normalized = "".join(ch.lower() for ch in header if ch.isalnum())
+        if any(word in normalized for word in keywords):
+            return index
+    return None
+
+
+def _group_totals(headers, rows, group_index, value_index):
+    if group_index is None or value_index is None:
+        return []
+    totals = {}
+    for row in rows:
+        group = row[group_index] if group_index < len(row) else None
+        value = numeric_value(row[value_index] if value_index < len(row) else None)
+        if is_missing(group) or value is None:
+            continue
+        label = str(group).strip()
+        totals[label] = totals.get(label, 0.0) + value
+    return [{"label": key, "value": round(value, 2)}
+            for key, value in sorted(totals.items(), key=lambda item: item[1], reverse=True)[:10]]
+
+
 def is_missing(value):
     return value is None or (isinstance(value, str) and not value.strip())
 
@@ -153,6 +178,25 @@ async def analyze_file(file: UploadFile = File(...)):
     else:
         insights.append("No numeric columns were detected for summary statistics.")
 
+    sales_index = _header_index(headers, ["sales", "revenue", "amount", "total"])
+    profit_index = _header_index(headers, ["profit", "income", "netprofit"])
+    date_index = _header_index(headers, ["date", "orderdate", "transactiondate"])
+    region_index = _header_index(headers, ["region", "city", "location", "state"])
+    product_index = _header_index(headers, ["product", "item", "category", "sku"])
+
+    monthly = {}
+    if date_index is not None and sales_index is not None:
+        for row in rows:
+            raw_date = row[date_index] if date_index < len(row) else None
+            amount = numeric_value(row[sales_index] if sales_index < len(row) else None)
+            if is_missing(raw_date) or amount is None:
+                continue
+            try:
+                month = datetime.fromisoformat(str(raw_date).strip()[:10]).strftime("%Y-%m")
+            except (TypeError, ValueError):
+                continue
+            monthly[month] = monthly.get(month, 0.0) + amount
+
     return {
         "filename": file.filename,
         "row_count": len(rows),
@@ -162,4 +206,10 @@ async def analyze_file(file: UploadFile = File(...)):
         "columns": column_results,
         "insights": insights,
         "preview": [[str(v) if v is not None else "" for v in row] for row in rows[:5]],
+        "charts": {
+            "monthly_sales": [{"label": key, "value": round(value, 2)} for key, value in sorted(monthly.items())],
+            "region_sales": _group_totals(headers, rows, region_index, sales_index),
+            "product_sales": _group_totals(headers, rows, product_index, sales_index),
+            "profit_by_region": _group_totals(headers, rows, region_index, profit_index),
+        },
     }
