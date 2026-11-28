@@ -10,6 +10,18 @@
 <body><main class="shell">
 <header class="top"><div class="brand"><span class="mark">A</span>Analytics InAdvance</div><div class="status">● Prototype ready</div></header>
 <section class="hero"><div class="eyebrow">Business intelligence, simplified</div><h1>Ask better questions.<br><span>Get analytics done faster.</span></h1><p class="sub">Turn everyday business questions into practical Excel formulas, Power BI DAX measures and Tableau calculated fields. Upload a dataset to inspect its quality and statistics.</p></section>
+
+<section class="panel wide" id="projectStudio" style="margin:24px 0;border:1px solid #52668d;background:linear-gradient(145deg,#101d35,#11172a)">
+ <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap"><div><div class="eyebrow">AI DEVELOPMENT WORKSPACE</div><h2 style="font-size:25px;margin:5px 0">AI Project Studio</h2><p class="hint">Describe an idea. Chat with your AI builder. Generate a project plan and downloadable source files.</p></div><span class="tag">AI API REQUIRED</span></div>
+ <div class="metric-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0"><div class="metric"><strong>01</strong><span>Plan your idea</span></div><div class="metric"><strong>02</strong><span>Generate source files</span></div><div class="metric"><strong>03</strong><span>Export project ZIP</span></div></div>
+ <label for="projectPrompt">WHAT DO YOU WANT TO BUILD?</label><textarea id="projectPrompt" rows="3" placeholder="Example: Build an AI-powered job portal with student and recruiter login, resume analysis, job recommendations and an admin dashboard."></textarea>
+ <div style="display:flex;gap:9px;flex-wrap:wrap;margin:10px 0 16px"><button class="primary" id="generateProject" type="button">✦ Generate my project</button><button class="secondary" id="sendProjectMessage" type="button">Send to project chat</button><button class="secondary" id="clearProjectChat" type="button">New chat</button></div>
+ <div class="layout" style="grid-template-columns:minmax(0,1.3fr) minmax(260px,.7fr);gap:14px">
+  <div class="feature" style="min-height:320px"><h3>Project conversation</h3><div id="projectChatMessages" style="display:flex;flex-direction:column;gap:10px;max-height:430px;overflow:auto;padding:8px 2px" aria-live="polite"><div class="feature"><strong>AI Project Builder</strong><p>Hi! Tell me what you want to create. I can plan features, choose a stack, design architecture and generate starter files.</p></div></div><label for="projectChatInput">CONTINUE THE CONVERSATION</label><textarea id="projectChatInput" rows="2" placeholder="Add a feature, change the technology, fix a bug, or ask a question…"></textarea><button class="primary" id="sendProjectChat" type="button" style="margin-top:9px">Send message</button><p id="projectStudioError" class="muted" style="color:#ff9caa" aria-live="polite"></p></div>
+  <div class="feature"><h3>Generated project workspace</h3><div id="projectPlan" class="muted">Your project plan will appear here.</div><h3 style="margin-top:18px">Generated files <span id="projectFileCount" class="tag">0 FILES</span></h3><div id="projectFiles" style="max-height:260px;overflow:auto"><p class="muted">No files generated yet.</p></div><button class="secondary" id="downloadProjectZip" type="button" disabled style="margin-top:12px;width:100%">Download project ZIP</button><p class="muted">Review generated code, run tests and configure secrets before deployment.</p></div>
+ </div>
+</section>
+
 <section class="layout"><div class="panel"><h2>Analytics Formula Assistant</h2><div class="hint">Describe your task in plain English.</div>
 <label for="platform">WORKSPACE</label><select id="platform"><option>Excel</option><option>Power BI</option><option>Tableau</option></select>
 <label for="columns">DATA COLUMN NAMES (OPTIONAL)</label><input id="columns" type="text" placeholder="Example: Order Date, Sales, Profit, Customer"><p class="hint">Enter comma-separated column names to tailor DAX and Tableau expressions to your data.</p><label for="prompt">WHAT DO YOU WANT TO SOLVE?</label><textarea id="prompt">Calculate total sales for each month</textarea>
@@ -78,6 +90,55 @@
 <div class="foot">Analytics InAdvance · Prototype v0.4 · Validate formulas and inspect source data before business use.</div></main>
 <script>
 const $=id=>document.getElementById(id);
+
+let projectMessages=[],generatedProjectFiles=[];
+function addProjectChatMessage(role,content){
+ const wrap=document.createElement("div");wrap.className="feature";
+ const title=document.createElement("strong");title.textContent=role==="user"?"You":"AI Project Builder";
+ const body=document.createElement("p");body.style.whiteSpace="pre-wrap";body.textContent=content;wrap.append(title,body);
+ $("projectChatMessages").append(wrap);$("projectChatMessages").scrollTop=$("projectChatMessages").scrollHeight;
+}
+function renderProjectFiles(files){
+ generatedProjectFiles=Array.isArray(files)?files:[];
+ $("projectFileCount").textContent=generatedProjectFiles.length+" FILES";$("projectFiles").replaceChildren();
+ if(!generatedProjectFiles.length){const p=document.createElement("p");p.className="muted";p.textContent="No files generated yet.";$("projectFiles").append(p);}
+ generatedProjectFiles.forEach(file=>{
+  const row=document.createElement("div");row.style.padding="9px 0";row.style.borderBottom="1px solid #2b3a56";
+  const name=document.createElement("button");name.className="secondary";name.type="button";name.style.width="100%";name.style.textAlign="left";name.textContent="▤ "+file.path;
+  name.addEventListener("click",()=>{const win=window.open("","_blank");if(win){const pre=win.document.createElement("pre");pre.style.cssText="white-space:pre-wrap;word-break:break-word;font:13px monospace;padding:20px";pre.textContent=file.content;win.document.body.append(pre);win.document.title=file.path;}});
+  row.append(name);$("projectFiles").append(row);
+ });
+ $("downloadProjectZip").disabled=!generatedProjectFiles.length;
+}
+async function sendProjectRequest(mode){
+ const prompt=mode==="generate"?$("projectPrompt").value.trim():$("projectChatInput").value.trim();
+ if(!prompt){$("projectStudioError").textContent="Describe your project or enter a message first.";return;}
+ projectMessages.push({role:"user",content:prompt});addProjectChatMessage("user",prompt);
+ $("projectPrompt").value="";$("projectChatInput").value="";$("projectStudioError").textContent="";
+ const buttons=[$("generateProject"),$("sendProjectMessage"),$("sendProjectChat")];buttons.forEach(b=>b.disabled=true);
+ const active=mode==="generate"?$("generateProject"):mode==="chat"?$("sendProjectChat"):$("sendProjectMessage");const old=active.textContent;active.textContent="Working…";
+ try{
+  const response=await fetch("/api/project/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:projectMessages,mode})});
+  const data=await response.json();if(!response.ok)throw new Error(data.detail||"Project generation failed.");
+  const reply=data.assistant_message||"I have prepared the next project step.";projectMessages.push({role:"assistant",content:reply});addProjectChatMessage("assistant",reply);
+  if(data.project_plan)$("projectPlan").textContent=data.project_plan;
+  if(Array.isArray(data.files)&&data.files.length)renderProjectFiles(data.files);
+  if(Array.isArray(data.next_steps)&&data.next_steps.length){const p=document.createElement("p");p.className="muted";p.textContent="Next: "+data.next_steps.join(" · ");$("projectPlan").append(p);}
+ }catch(error){$("projectStudioError").textContent=error.message;}
+ finally{buttons.forEach(b=>b.disabled=false);active.textContent=old;}
+}
+$("generateProject").addEventListener("click",()=>sendProjectRequest("generate"));
+$("sendProjectMessage").addEventListener("click",()=>sendProjectRequest("chat"));
+$("sendProjectChat").addEventListener("click",()=>sendProjectRequest("chat"));
+$("projectChatInput").addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendProjectRequest("chat");}});
+$("clearProjectChat").addEventListener("click",()=>{projectMessages=[];generatedProjectFiles=[];$("projectPlan").textContent="Your project plan will appear here.";$("projectChatMessages").replaceChildren();addProjectChatMessage("assistant","New project chat started. What would you like to build?");renderProjectFiles([]);$("projectStudioError").textContent="";});
+$("downloadProjectZip").addEventListener("click",async()=>{
+ if(!generatedProjectFiles.length)return;const btn=$("downloadProjectZip");btn.disabled=true;btn.textContent="Preparing ZIP…";
+ try{const response=await fetch("/api/project/export",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({files:generatedProjectFiles})});if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||"Could not export project.");}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="analytics-inadvance-project.zip";link.click();URL.revokeObjectURL(url);}
+ catch(error){$("projectStudioError").textContent=error.message;}
+ finally{btn.disabled=!generatedProjectFiles.length;btn.textContent="Download project ZIP";}
+});
+
 let latestReport=null;
 
 function renderChart(title, items){
