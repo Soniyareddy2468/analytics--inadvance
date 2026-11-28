@@ -335,7 +335,7 @@ async def download_pdf_report(file: UploadFile = File(...)):
         right_chart = make_bar_chart(right_title, report.get("charts", {}).get(right_key, []))
         chart_cells.append([left_chart, right_chart])
 
-    chart_table = Table(chart_cells, colWidths=[doc.width / 2] * 2, rowHeights=[195] * len(chart_cells))
+    chart_table = Table(chart_cells, colWidths=[doc.width / 2] * 2, rowHeights=[205] * len(chart_cells))
     chart_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fafc")),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
