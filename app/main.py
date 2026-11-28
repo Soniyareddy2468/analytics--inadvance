@@ -146,6 +146,8 @@ async def analyze_file(
     filter_month: Optional[str] = None,
     filter_region: Optional[str] = None,
     filter_product: Optional[str] = None,
+    filter_start_date: Optional[str] = None,
+    filter_end_date: Optional[str] = None,
 ):
     headers, rows = await read_tabular_upload(file)
     sales_index = _header_index(headers, ["sales", "revenue", "amount", "total"])
@@ -169,6 +171,8 @@ async def analyze_file(
             if (not filter_month or row_month(row) == filter_month)
             and (not filter_region or (region_index is not None and str(row[region_index]).strip() == filter_region))
             and (not filter_product or (product_index is not None and str(row[product_index]).strip() == filter_product))
+            and (not filter_start_date or (date_index is not None and date_index < len(row) and str(row[date_index])[:10] >= filter_start_date))
+            and (not filter_end_date or (date_index is not None and date_index < len(row) and str(row[date_index])[:10] <= filter_end_date))
         ]
     column_results = []
     for index, name in enumerate(headers):
@@ -361,9 +365,11 @@ async def download_pdf_report(
     filter_month: Optional[str] = Form(None),
     filter_region: Optional[str] = Form(None),
     filter_product: Optional[str] = Form(None),
+    filter_start_date: Optional[str] = Form(None),
+    filter_end_date: Optional[str] = Form(None),
 ):
     """Analyze an uploaded dataset and return a formatted PDF report."""
-    report = await analyze_file(file, filter_month, filter_region, filter_product)
+    report = await analyze_file(file, filter_month, filter_region, filter_product, filter_start_date, filter_end_date)
 
     try:
         from reportlab.lib import colors
