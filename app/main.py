@@ -7,7 +7,7 @@ import math
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -213,3 +213,147 @@ async def analyze_file(file: UploadFile = File(...)):
             "profit_by_region": _group_totals(headers, rows, region_index, profit_index),
         },
     }
+
+
+@app.post("/api/report/pdf")
+async def download_pdf_report(file: UploadFile = File(...)):
+    """Analyze an uploaded dataset and return a formatted PDF report."""
+    report = await analyze_file(file)
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+        )
+    except ImportError:
+        raise HTTPException(status_code=503, detail="PDF export is unavailable. Install the reportlab dependency.")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        rightMargin=14 * mm, leftMargin=14 * mm,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+        title="Analytics InAdvance Dataset Report"
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="ReportTitle", parent=styles["Title"], fontSize=21,
+        leading=25, textColor=colors.HexColor("#24345b"),
+        alignment=TA_CENTER, spaceAfter=5
+    ))
+    styles.add(ParagraphStyle(
+        name="SectionHeading", parent=styles["Heading2"],
+        textColor=colors.HexColor("#167c70"), spaceBefore=12, spaceAfter=6
+    ))
+    styles.add(ParagraphStyle(
+        name="SmallCell", parent=styles["BodyText"], fontSize=7,
+        leading=9, wordWrap="CJK"
+    ))
+
+    story = [
+        Paragraph("Analytics InAdvance", styles["ReportTitle"]),
+        Paragraph("Dataset Analysis Report", styles["Heading2"]),
+        Paragraph(f"File: {report['filename']}", styles["BodyText"]),
+        Paragraph(f"Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}", styles["BodyText"]),
+        Spacer(1, 8),
+    ]
+
+    metric_data = [
+        ["Rows", "Columns", "Missing cells", "Duplicate rows"],
+        [str(report["row_count"]), str(report["column_count"]),
+         str(report["missing_cells"]), str(report["duplicate_rows"])]
+    ]
+    metric_table = Table(metric_data, colWidths=[doc.width / 4] * 4)
+    metric_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24345b")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#edf5f5")),
+        ("TEXTCOLOR", (0, 1), (-1, 1), colors.HexColor("#17233b")),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+    ]))
+    story.extend([metric_table, Paragraph("Key insights", styles["SectionHeading"])])
+    for insight in report["insights"]:
+        story.append(Paragraph("• " + insight, styles["BodyText"]))
+    story.append(Paragraph("Visual analytics", styles["SectionHeading"]))
+
+    chart_titles = [
+        ("Monthly sales", "monthly_sales"),
+        ("Sales by region", "region_sales"),
+        ("Sales by product", "product_sales"),
+        ("Profit by region", "profit_by_region"),
+    ]
+    chart_rows = []
+    for title, key in chart_titles:
+        items = report.get("charts", {}).get(key, [])
+        chart_rows.append([Paragraph(f"<b>{title}</b>", styles["SmallCell"]),
+                           Paragraph(" | ".join(
+                               f"{item['label']}: {item['value']:,.2f}" for item in items
+                           ) if items else "No matching columns found.", styles["SmallCell"])])
+    chart_table = Table(chart_rows, colWidths=[42 * mm, doc.width - 42 * mm])
+    chart_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#edf5f5")),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#cbd5e1")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(chart_table)
+
+    story.append(Paragraph("Column profile", styles["SectionHeading"]))
+    column_data = [["Column", "Non-empty", "Missing", "Sum", "Average", "Min", "Max"]]
+    for col in report["columns"]:
+        column_data.append([
+            str(col["name"]), str(col["non_empty"]), str(col["missing"]),
+            f"{col['sum']:,.2f}" if "sum" in col else "—",
+            f"{col['average']:,.2f}" if "average" in col else "—",
+            f"{col['minimum']:,.2f}" if "minimum" in col else "—",
+            f"{col['maximum']:,.2f}" if "maximum" in col else "—",
+        ])
+    profile = Table(column_data, repeatRows=1)
+    profile.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24345b")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f6fa")]),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#cbd5e1")),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("PADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(profile)
+
+    if report.get("preview"):
+        story.append(Paragraph("Data preview (first five rows)", styles["SectionHeading"]))
+        preview_data = [[Paragraph(str(v), styles["SmallCell"]) for v in report["columns"]]]
+        preview_data.extend([
+            [Paragraph(str(v), styles["SmallCell"]) for v in row]
+            for row in report["preview"]
+        ])
+        preview = Table(preview_data, repeatRows=1)
+        preview.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24345b")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("PADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(preview)
+
+    story.append(Spacer(1, 10))
+    story.append(Paragraph(
+        "Generated by Analytics InAdvance. Review the original dataset before making business decisions.",
+        styles["Italic"]
+    ))
+    doc.build(story)
+    buffer.seek(0)
+    safe_name = Path(report["filename"]).stem.replace('"', "").replace("\\", "_")
+    return StreamingResponse(
+        buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}-analysis-report.pdf"'}
+    )
