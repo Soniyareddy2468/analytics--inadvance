@@ -3,7 +3,8 @@ from typing import Optional
 import csv
 import io
 import json
-import math\nimport os
+import math
+import os
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
