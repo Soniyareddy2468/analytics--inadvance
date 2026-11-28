@@ -31,9 +31,10 @@
 <h3>Visual analytics</h3><div class="chart-grid" id="chartGrid"></div><h3>Column profile</h3><div class="table-wrap"><table><thead><tr><th>Column</th><th>Non-empty</th><th>Missing</th><th>Sum</th><th>Average</th><th>Min</th><th>Max</th></tr></thead><tbody id="columnRows"></tbody></table></div>
 <h3>Data preview</h3><div class="table-wrap"><table><thead id="previewHead"></thead><tbody id="previewRows"></tbody></table></div>
 <button class="secondary" id="downloadReport" style="margin-top:15px">Download JSON report</button>
+<button class="secondary" id="downloadPdf" style="margin-top:15px;margin-left:8px">Download PDF report</button>
 <p class="muted">Note: Numeric summaries ignore empty and non-numeric cells. Review the source workbook before making business decisions.</p>
 </div></section>
-<div class="foot">Analytics InAdvance · Prototype v0.2 · Validate formulas and inspect source data before business use.</div></main>
+<div class="foot">Analytics InAdvance · Prototype v0.3 · Validate formulas and inspect source data before business use.</div></main>
 <script>
 const $=id=>document.getElementById(id);
 let latestReport=null;
@@ -60,4 +61,5 @@ $("analyze").addEventListener("click",async()=>{const file=$("dataset").files[0]
  renderChart("Profit by region",data.charts?.profit_by_region)
  );$("analysisResult").classList.add("show");}catch(error){$("analysisError").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Analyze dataset";}});
 $("downloadReport").addEventListener("click",()=>{if(!latestReport)return;const blob=new Blob([JSON.stringify(latestReport,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="analytics-inadvance-report.json";link.click();URL.revokeObjectURL(url);});
+$("downloadPdf").addEventListener("click",async()=>{const file=$("dataset").files[0];if(!file){$("analysisError").textContent="Please select the dataset again before downloading the PDF.";return;}const btn=$("downloadPdf");btn.disabled=true;btn.textContent="Creating PDF…";$("analysisError").textContent="";try{const body=new FormData();body.append("file",file);const response=await fetch("/api/report/pdf",{method:"POST",body});if(!response.ok){const err=await response.json().catch(()=>({}));throw new Error(err.detail||"PDF export failed");}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=(file.name.replace(/\\.[^.]+$/,"")||"dataset")+"-analysis-report.pdf";document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);}catch(error){$("analysisError").textContent=error.message;}finally{btn.disabled=false;btn.textContent="Download PDF report";}});
 </script></body></html>
