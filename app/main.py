@@ -197,6 +197,50 @@ async def analyze_file(file: UploadFile = File(...)):
                 continue
             monthly[month] = monthly.get(month, 0.0) + amount
 
+    sales_values = [numeric_value(row[sales_index] if sales_index is not None and sales_index < len(row) else None) for row in rows]
+    profit_values = [numeric_value(row[profit_index] if profit_index is not None and profit_index < len(row) else None) for row in rows]
+    total_sales = round(sum(value for value in sales_values if value is not None), 2) if sales_index is not None else None
+    total_profit = round(sum(value for value in profit_values if value is not None), 2) if profit_index is not None else None
+    best_region = _group_totals(headers, rows, region_index, sales_index)
+    best_product = _group_totals(headers, rows, product_index, sales_index)
+    monthly_sorted = sorted(monthly.items())
+    monthly_growth = None
+    if len(monthly_sorted) >= 2:
+        previous, current = monthly_sorted[-2][1], monthly_sorted[-1][1]
+        if previous != 0:
+            monthly_growth = round(((current - previous) / abs(previous)) * 100, 2)
+
+    business_insights = {
+        "total_sales": total_sales,
+        "total_profit": total_profit,
+        "best_region": best_region[0] if best_region else None,
+        "best_product": best_product[0] if best_product else None,
+        "latest_month": monthly_sorted[-1][0] if monthly_sorted else None,
+        "monthly_growth_percent": monthly_growth,
+        "recommendations": [],
+    }
+    if business_insights["best_product"]:
+        business_insights["recommendations"].append(
+            f"Prioritize stock and promotion planning for {business_insights['best_product']['label']}, the highest-sales product in this dataset."
+        )
+    if business_insights["best_region"]:
+        business_insights["recommendations"].append(
+            f"Review what is driving sales in {business_insights['best_region']['label']} and test whether those practices can be repeated in other regions."
+        )
+    if monthly_growth is not None:
+        direction = "increased" if monthly_growth >= 0 else "decreased"
+        business_insights["recommendations"].append(
+            f"Sales {direction} by {abs(monthly_growth):.1f}% in {monthly_sorted[-1][0]} compared with {monthly_sorted[-2][0]}; investigate major changes in orders, pricing or product mix."
+        )
+    if total_profit is None:
+        business_insights["recommendations"].append(
+            "Add a numeric Profit column to enable profit totals and profitability analysis."
+        )
+    if not business_insights["recommendations"]:
+        business_insights["recommendations"].append(
+            "Use column headers containing Date, Sales, Profit, Region and Product to unlock more business insights."
+        )
+
     return {
         "filename": file.filename,
         "row_count": len(rows),
@@ -205,6 +249,7 @@ async def analyze_file(file: UploadFile = File(...)):
         "missing_cells": missing_cells,
         "columns": column_results,
         "insights": insights,
+        "business_insights": business_insights,
         "preview": [[str(v) if v is not None else "" for v in row] for row in rows[:5]],
         "charts": {
             "monthly_sales": [{"label": key, "value": round(value, 2)} for key, value in sorted(monthly.items())],
