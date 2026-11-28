@@ -1,3 +1,12 @@
+---
+title: Analytics InAdvance
+emoji: 📊
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+---
+
 # Analytics InAdvance
 
 **Ask. Analyze. Automate.**
@@ -18,6 +27,10 @@ An analytics productivity workspace for Advanced Excel, Power BI and Tableau. Th
 - FastAPI backend and responsive browser interface.
 
 The formula assistant currently uses rule-based matching; no AI API key is required. Dataset profiling is deterministic and runs on the uploaded file during the request.
+
+## Deploy on Hugging Face Spaces (Docker)
+
+This repository includes Docker configuration for Hugging Face Spaces. Create a new Space with the Docker SDK and push/import this repository into that Space. The container listens on port 7860. **Important:** Hugging Face currently requires a paid plan to create Docker or Gradio Spaces; free Static Spaces cannot run this FastAPI backend. Check the current plan requirements before creating a Space.
 
 ## Run in Google Cloud Shell
 1. Open [Google Cloud Shell](https://shell.cloud.google.com/) and wait for the terminal to load.
