@@ -329,7 +329,7 @@ async def download_pdf_report(file: UploadFile = File(...)):
 
     if report.get("preview"):
         story.append(Paragraph("Data preview (first five rows)", styles["SectionHeading"]))
-        preview_data = [[Paragraph(str(v), styles["SmallCell"]) for v in report["columns"]]]
+        preview_data = [[Paragraph(str(col["name"]), styles["SmallCell"]) for col in report["columns"]]]
         preview_data.extend([
             [Paragraph(str(v), styles["SmallCell"]) for v in row]
             for row in report["preview"]
