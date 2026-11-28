@@ -21,6 +21,7 @@ An analytics productivity workspace for Advanced Excel, Power BI and Tableau. Th
 - Calculate sum, average, minimum and maximum for numeric columns.
 - Detect duplicate rows and summarize dataset quality.
 - Display key findings and download JSON and formatted PDF analysis reports.
+- Create a cleaned CSV copy by optionally removing duplicate rows, dropping rows with missing values, or filling missing numeric cells with the column average.
 - Power BI starter DAX measures for totals, averages, profit margin, distinct customers, row counts, minimums and maximums.
 - Tableau starter calculated fields for totals, averages, profit margin, distinct customers, record counts, minimums, maximums and a FIXED customer-level LOD expression.
 - Optional comma-separated column names to tailor Power BI and Tableau suggestions.
@@ -66,6 +67,7 @@ If port 8000 is already in use, the server may already be running. Try Web Previ
 - `POST /api/inspect` accepts CSV/XLSX uploads and returns headers and a preview.
 - `POST /api/analyze` accepts a CSV/XLSX/XLSM upload and returns dataset statistics, missing values, duplicate-row count, insights, chart data and a preview.
 - `POST /api/report/pdf` accepts a CSV/XLSX/XLSM upload and returns a formatted PDF analysis report.
+- `POST /api/clean` accepts a CSV/XLSX/XLSM upload and returns a cleaned CSV copy.
 
 ## Roadmap
 1. Excel formula assistant and dataset analysis (prototype)
