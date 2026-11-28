@@ -6,7 +6,7 @@ import json
 import math
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -213,6 +213,70 @@ async def analyze_file(file: UploadFile = File(...)):
             "profit_by_region": _group_totals(headers, rows, region_index, profit_index),
         },
     }
+
+
+@app.post("/api/clean")
+async def clean_dataset(
+    file: UploadFile = File(...),
+    remove_duplicates: bool = Form(True),
+    missing_strategy: str = Form("keep"),
+):
+    """Return a cleaned CSV copy; the uploaded original is never changed."""
+    if missing_strategy not in ("keep", "drop_rows", "fill_numeric_mean"):
+        raise HTTPException(status_code=400, detail="Choose keep, drop_rows or fill_numeric_mean.")
+
+    headers, rows = await read_tabular_upload(file)
+    original_rows = len(rows)
+    working = [list(row) for row in rows]
+
+    if missing_strategy == "drop_rows":
+        working = [row for row in working if not any(is_missing(v) for v in row)]
+    elif missing_strategy == "fill_numeric_mean":
+        for index in range(len(headers)):
+            column = [row[index] if index < len(row) else None for row in working]
+            present = [v for v in column if not is_missing(v)]
+            numbers = [numeric_value(v) for v in present]
+            if present and all(n is not None for n in numbers):
+                mean_value = sum(numbers) / len(numbers)
+                for row in working:
+                    if index >= len(row):
+                        row.extend([None] * (index + 1 - len(row)))
+                    if is_missing(row[index]):
+                        row[index] = round(mean_value, 4)
+
+    before_dedup = len(working)
+    if remove_duplicates:
+        seen = set()
+        unique_rows = []
+        for row in working:
+            key = tuple("" if is_missing(v) else str(v).strip() for v in row)
+            if key not in seen:
+                seen.add(key)
+                unique_rows.append(row)
+        working = unique_rows
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows([
+        ["" if is_missing(v) else v for v in row[:len(headers)]]
+        for row in working
+    ])
+    cleaned = output.getvalue().encode("utf-8-sig")
+    removed_duplicates = before_dedup - len(working)
+    removed_rows = original_rows - before_dedup
+    stem = Path(file.filename or "dataset").stem
+    return StreamingResponse(
+        io.BytesIO(cleaned),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{stem}-cleaned.csv"',
+            "X-Original-Rows": str(original_rows),
+            "X-Cleaned-Rows": str(len(working)),
+            "X-Duplicates-Removed": str(removed_duplicates),
+            "X-Rows-Removed": str(removed_rows),
+        },
+    )
 
 
 @app.post("/api/report/pdf")
