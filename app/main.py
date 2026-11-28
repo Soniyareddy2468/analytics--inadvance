@@ -3,7 +3,7 @@ from typing import Optional
 import csv
 import io
 import json
-import math
+import math\nimport os
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -293,6 +293,61 @@ async def analyze_file(
             "profit_by_region": _group_totals(headers, rows, region_index, profit_index),
         },
     }
+
+
+class ProjectChatRequest(BaseModel):
+    messages: list[dict[str, str]]
+    mode: str = "chat"
+
+
+@app.post("/api/project/chat")
+async def project_chat(request: ProjectChatRequest):
+    from app.project_engine import generate_project_reply, ProjectAIError
+    if request.mode not in ("chat", "generate"):
+        raise HTTPException(status_code=400, detail="Mode must be chat or generate.")
+    if not request.messages or len(request.messages) > 30:
+        raise HTTPException(status_code=400, detail="Send between 1 and 30 chat messages.")
+    cleaned = []
+    for message in request.messages:
+        role, content = message.get("role"), message.get("content", "")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            cleaned.append({"role": role, "content": content[:12000]})
+    if not cleaned or cleaned[-1]["role"] != "user":
+        raise HTTPException(status_code=400, detail="The latest message must be a user message.")
+    try:
+        return await generate_project_reply(cleaned, request.mode)
+    except ProjectAIError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/project/export")
+def export_project(payload: dict):
+    import zipfile
+    from pathlib import PurePosixPath
+    files = payload.get("files", []) if isinstance(payload, dict) else []
+    if not isinstance(files, list) or not files or len(files) > 50:
+        raise HTTPException(status_code=400, detail="Provide between 1 and 50 project files.")
+    buffer, total_bytes, seen = io.BytesIO(), 0, set()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for item in files:
+            if not isinstance(item, dict): continue
+            path, content = item.get("path", ""), item.get("content", "")
+            if not isinstance(path, str) or not isinstance(content, str): continue
+            safe = PurePosixPath(path)
+            if safe.is_absolute() or not safe.parts or any(part in ("", ".", "..") for part in safe.parts):
+                raise HTTPException(status_code=400, detail="A project file contains an unsafe path.")
+            normalized = str(safe)
+            if normalized in seen: continue
+            seen.add(normalized)
+            encoded = content.encode("utf-8")
+            total_bytes += len(encoded)
+            if len(encoded) > 300000 or total_bytes > 2000000:
+                raise HTTPException(status_code=413, detail="Project ZIP is limited to 2 MB of generated source files.")
+            archive.writestr(normalized, encoded)
+    if not seen: raise HTTPException(status_code=400, detail="No valid project files were supplied.")
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="analytics-inadvance-project.zip"'})
 
 
 @app.post("/api/ask")
